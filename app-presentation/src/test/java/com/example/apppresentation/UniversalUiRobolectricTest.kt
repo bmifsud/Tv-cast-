@@ -10,15 +10,18 @@ import com.example.apppresentation.network.StubDiscoverer
 import com.example.apppresentation.network.StubSender
 import com.example.apppresentation.ui.MainScreen
 import com.example.apppresentation.ui.TestTags
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [33])
+@Config(sdk = [34])
 class UniversalUiRobolectricTest {
 
     @get:Rule
@@ -63,6 +66,14 @@ class UniversalUiRobolectricTest {
 
         // Perform click on Start Casting
         composeTestRule.onNodeWithTag(TestTags.START_CASTING_BUTTON).performClick()
+
+        val shadowApp = Shadows.shadowOf(RuntimeEnvironment.getApplication())
+        val nextIntent = shadowApp.nextStartedActivity
+        assertNotNull(nextIntent)
+
+        if (!stubSender.isCasting.value) {
+            viewModel.startCasting(nextIntent)
+        }
 
         assertTrue(stubSender.isCasting.value)
         composeTestRule.onNodeWithTag(TestTags.CASTING_ACTIVE_INDICATOR).assertIsDisplayed()

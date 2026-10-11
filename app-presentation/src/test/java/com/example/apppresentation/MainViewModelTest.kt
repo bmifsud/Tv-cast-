@@ -78,6 +78,8 @@ class MainViewModelTest {
         viewModel.startDiscovery()
         viewModel.startCasting(null)
 
+        testDispatcher.scheduler.advanceUntilIdle()
+
         val sampleNalUnit = byteArrayOf(0x00, 0x00, 0x00, 0x01, 0x65)
         stubCaptureEmitter.emitFrame(sampleNalUnit)
 

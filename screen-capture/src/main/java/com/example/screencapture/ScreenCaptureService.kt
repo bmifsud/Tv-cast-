@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.hardware.display.VirtualDisplay
+import android.media.MediaCodec
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Binder
@@ -37,6 +38,8 @@ class ScreenCaptureService : Service() {
     private var virtualDisplay: VirtualDisplay? = null
     private var encoder: ScreenCaptureEncoder? = null
     private var encoderCollectJob: Job? = null
+
+    var codecFactory: (String) -> MediaCodec = { MediaCodec.createEncoderByType(it) }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -120,13 +123,17 @@ class ScreenCaptureService : Service() {
         encoderCollectJob?.cancel()
         encoderCollectJob = null
 
-        encoder?.stop(releaseVirtualDisplay = true)
-        encoder = null
-
-        try {
-            virtualDisplay?.release()
-        } catch (_: Exception) {}
+        val currentVd = virtualDisplay
         virtualDisplay = null
+
+        if (encoder != null) {
+            encoder?.stop(releaseVirtualDisplay = true)
+            encoder = null
+        } else {
+            try {
+                currentVd?.release()
+            } catch (_: Exception) {}
+        }
 
         try {
             mediaProjection?.unregisterCallback(projectionCallback)
@@ -161,7 +168,8 @@ class ScreenCaptureService : Service() {
             width = width,
             height = height,
             dpi = dpi,
-            existingVirtualDisplay = virtualDisplay
+            existingVirtualDisplay = virtualDisplay,
+            codecFactory = codecFactory
         )
         encoder = newEncoder
 
@@ -171,8 +179,11 @@ class ScreenCaptureService : Service() {
             }
         }
 
-        newEncoder.start()
-        virtualDisplay = newEncoder.virtualDisplay
+        try {
+            newEncoder.start()
+        } finally {
+            virtualDisplay = newEncoder.virtualDisplay
+        }
     }
 
     fun stopCapture() {

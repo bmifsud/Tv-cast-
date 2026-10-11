@@ -15,3 +15,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "AndroidCast"
 include(":app-presentation")
+include(":screen-capture")
+include(":network-transport")

@@ -61,15 +61,28 @@ fun MainScreen(
     val isTv = isTvOverride ?: remember(context) { DeviceTypeDetector.isTv(context) }
 
     if (isTv) {
-        TvReceiverScreen(modifier = modifier)
+        TvReceiverScreen(viewModel = viewModel, modifier = modifier)
     } else {
         TabletSenderScreen(viewModel = viewModel, modifier = modifier)
     }
 }
 
 @Composable
-fun TvReceiverScreen(modifier: Modifier = Modifier) {
+fun TvReceiverScreen(
+    viewModel: MainViewModel,
+    modifier: Modifier = Modifier
+) {
     val decoder = remember { H264Decoder() }
+
+    LaunchedEffect(Unit) {
+        viewModel.startTvReceiving()
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.incomingStream.collect { nalUnit ->
+            decoder.decodeNalUnit(nalUnit)
+        }
+    }
 
     Box(
         modifier = modifier
@@ -134,6 +147,7 @@ fun TvReceiverScreen(modifier: Modifier = Modifier) {
     DisposableEffect(Unit) {
         onDispose {
             decoder.stop()
+            viewModel.stopTvReceiving()
         }
     }
 }
@@ -152,12 +166,20 @@ fun TabletSenderScreen(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            viewModel.startCasting(result.data)
+            // Do NOT cache intent. Pass intent fresh to startCasting each time
+            viewModel.startCasting(result.data, context)
         }
     }
 
     LaunchedEffect(Unit) {
         viewModel.startDiscovery()
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.stopDiscovery()
+            viewModel.stopCasting()
+        }
     }
 
     Column(
@@ -220,10 +242,11 @@ fun TabletSenderScreen(
                         val projectionManager =
                             context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
                         projectionManager?.let { manager ->
+                            // Request a fresh consent intent every single time
                             mediaProjectionLauncher.launch(manager.createScreenCaptureIntent())
                         } ?: run {
-                            // Fallback if projectionManager is null in preview/test context
-                            viewModel.startCasting(null)
+                            // Fallback if projectionManager is null in test context
+                            viewModel.startCasting(null, context)
                         }
                     },
                     modifier = Modifier

@@ -7,4 +7,6 @@ interface Discoverer {
     val discoveredDevices: StateFlow<List<DiscoveredDevice>>
     fun startDiscovery()
     fun stopDiscovery()
+    fun startAdvertising() {}
+    fun stopAdvertising() {}
 }

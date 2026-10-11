@@ -1,9 +1,6 @@
 package com.example.apppresentation
 
-import com.example.apppresentation.capture.StubCaptureEmitter
 import com.example.apppresentation.network.DiscoveredDevice
-import com.example.apppresentation.network.StubDiscoverer
-import com.example.apppresentation.network.StubSender
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -21,17 +18,17 @@ import org.junit.Test
 class MainViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
-    private lateinit var stubDiscoverer: StubDiscoverer
-    private lateinit var stubSender: StubSender
-    private lateinit var stubCaptureEmitter: StubCaptureEmitter
+    private lateinit var stubDiscoverer: TestDiscoverer
+    private lateinit var stubSender: TestSender
+    private lateinit var stubCaptureEmitter: TestCaptureEmitter
     private lateinit var viewModel: MainViewModel
 
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
-        stubDiscoverer = StubDiscoverer()
-        stubSender = StubSender()
-        stubCaptureEmitter = StubCaptureEmitter()
+        stubDiscoverer = TestDiscoverer()
+        stubSender = TestSender()
+        stubCaptureEmitter = TestCaptureEmitter()
         viewModel = MainViewModel(
             discoverer = stubDiscoverer,
             sender = stubSender,

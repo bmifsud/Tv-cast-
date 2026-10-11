@@ -29,4 +29,12 @@ class RealDiscoverer(
     override fun stopDiscovery() {
         udpDiscoverer.stopDiscovery()
     }
+
+    override fun startAdvertising() {
+        udpDiscoverer.startAdvertising()
+    }
+
+    override fun stopAdvertising() {
+        udpDiscoverer.stopAdvertising()
+    }
 }

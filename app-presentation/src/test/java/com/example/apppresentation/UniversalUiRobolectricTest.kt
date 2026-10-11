@@ -5,9 +5,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import com.example.apppresentation.capture.StubCaptureEmitter
-import com.example.apppresentation.network.StubDiscoverer
-import com.example.apppresentation.network.StubSender
 import com.example.apppresentation.ui.MainScreen
 import com.example.apppresentation.ui.TestTags
 import org.junit.Assert.assertNotNull
@@ -30,9 +27,9 @@ class UniversalUiRobolectricTest {
     @Test
     fun testTvModeRendersTvLayout() {
         val viewModel = MainViewModel(
-            discoverer = StubDiscoverer(),
-            sender = StubSender(),
-            captureEmitter = StubCaptureEmitter()
+            discoverer = TestDiscoverer(),
+            sender = TestSender(),
+            captureEmitter = TestCaptureEmitter()
         )
 
         composeTestRule.setContent {
@@ -47,9 +44,9 @@ class UniversalUiRobolectricTest {
 
     @Test
     fun testTabletModeRendersTabletLayoutAndStartsCasting() {
-        val stubDiscoverer = StubDiscoverer()
-        val stubSender = StubSender()
-        val stubCaptureEmitter = StubCaptureEmitter()
+        val stubDiscoverer = TestDiscoverer()
+        val stubSender = TestSender()
+        val stubCaptureEmitter = TestCaptureEmitter()
         val viewModel = MainViewModel(
             discoverer = stubDiscoverer,
             sender = stubSender,

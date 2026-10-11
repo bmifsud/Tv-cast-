@@ -22,26 +22,36 @@ class UdpSender(
     var lastSentFrame: ByteArray? = null
         private set
 
+    @Volatile
     private var socket: DatagramSocket? = null
+
+    @Volatile
+    private var targetInetAddress: InetAddress? = null
 
     fun startCasting(targetIp: String, projectionData: Intent? = null) {
         if (_isCasting.value) return
         _isCasting.value = true
         scope.launch {
             try {
+                targetInetAddress = InetAddress.getByName(targetIp)
                 socket = DatagramSocket()
             } catch (_: Exception) {}
         }
     }
 
-    fun sendFrame(nalUnit: ByteArray, targetIp: String = "192.168.1.100") {
+    fun sendFrame(nalUnit: ByteArray, targetIp: String? = null) {
         if (!_isCasting.value) return
         lastSentFrame = nalUnit
         scope.launch {
             try {
-                val address = InetAddress.getByName(targetIp)
+                val address = if (!targetIp.isNullOrBlank()) {
+                    InetAddress.getByName(targetIp)
+                } else {
+                    targetInetAddress ?: InetAddress.getByName("192.168.1.100")
+                }
+                val ds = socket ?: DatagramSocket().also { socket = it }
                 val packet = DatagramPacket(nalUnit, nalUnit.size, address, port)
-                socket?.send(packet)
+                ds.send(packet)
             } catch (_: Exception) {}
         }
     }
@@ -52,5 +62,6 @@ class UdpSender(
             socket?.close()
         } catch (_: Exception) {}
         socket = null
+        targetInetAddress = null
     }
 }

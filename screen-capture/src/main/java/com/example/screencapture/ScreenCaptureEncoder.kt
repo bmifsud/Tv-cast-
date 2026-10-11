@@ -28,7 +28,8 @@ class ScreenCaptureEncoder(
     val frameRate: Int = 30,
     val iFrameInterval: Int = 2,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default),
-    existingVirtualDisplay: VirtualDisplay? = null
+    existingVirtualDisplay: VirtualDisplay? = null,
+    private val codecFactory: (String) -> MediaCodec = { MediaCodec.createEncoderByType(it) }
 ) {
     private var mediaCodec: MediaCodec? = null
     var virtualDisplay: VirtualDisplay? = existingVirtualDisplay
@@ -56,7 +57,7 @@ class ScreenCaptureEncoder(
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iFrameInterval)
             }
 
-            codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+            codec = codecFactory(MediaFormat.MIMETYPE_VIDEO_AVC)
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             surface = codec.createInputSurface()
 

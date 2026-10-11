@@ -6,7 +6,9 @@ import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.media.projection.MediaProjection
+import android.util.Log
 import android.view.Surface
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -42,44 +44,67 @@ class ScreenCaptureEncoder(
     fun start() {
         if (isEncoding) return
 
-        val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
-            setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
-            setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
-            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iFrameInterval)
-        }
+        var codec: MediaCodec? = null
+        var surface: Surface? = null
+        try {
+            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
+                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+                setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
+                setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iFrameInterval)
+            }
 
-        val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-        codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-        val surface = codec.createInputSurface()
+            codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            surface = codec.createInputSurface()
 
-        codec.start()
-        mediaCodec = codec
-        inputSurface = surface
+            codec.start()
+            mediaCodec = codec
+            inputSurface = surface
 
-        virtualDisplay = mediaProjection.createVirtualDisplay(
-            "ScreenCaptureDisplay",
-            width,
-            height,
-            dpi,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            surface,
-            null,
-            null
-        )
+            virtualDisplay = mediaProjection.createVirtualDisplay(
+                "ScreenCaptureDisplay",
+                width,
+                height,
+                dpi,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                surface,
+                null,
+                null
+            )
 
-        isEncoding = true
+            isEncoding = true
 
-        encodingJob = scope.launch {
-            drainEncoder(codec)
+            val activeCodec = codec
+            encodingJob = scope.launch {
+                drainEncoder(activeCodec)
+            }
+        } catch (e: Exception) {
+            isEncoding = false
+            try { virtualDisplay?.release() } catch (_: Exception) {}
+            virtualDisplay = null
+            try { surface?.release() } catch (_: Exception) {}
+            inputSurface = null
+            try { codec?.stop() } catch (_: Exception) {}
+            try { codec?.release() } catch (_: Exception) {}
+            mediaCodec = null
+            throw e
         }
     }
 
     private suspend fun drainEncoder(codec: MediaCodec) {
         val bufferInfo = MediaCodec.BufferInfo()
-        while (scope.isActive && isEncoding) {
-            try {
-                val outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, 10_000L)
+        try {
+            while (scope.isActive && isEncoding) {
+                val outputBufferIndex = try {
+                    codec.dequeueOutputBuffer(bufferInfo, 10_000L)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e("ScreenCaptureEncoder", "Error dequeuing output buffer", e)
+                    break
+                }
+
                 if (outputBufferIndex >= 0) {
                     val outputBuffer: ByteBuffer? = codec.getOutputBuffer(outputBufferIndex)
                     if (outputBuffer != null && bufferInfo.size > 0) {
@@ -90,12 +115,17 @@ class ScreenCaptureEncoder(
                         outputBuffer.get(data)
                         _encodedOutput.emit(data)
                     }
-                    codec.releaseOutputBuffer(outputBufferIndex, false)
+                    try {
+                        codec.releaseOutputBuffer(outputBufferIndex, false)
+                    } catch (_: Exception) {}
                 }
-            } catch (e: Exception) {
-                // Codec stopped or failed
-                break
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("ScreenCaptureEncoder", "Error draining encoder", e)
+        } finally {
+            isEncoding = false
         }
     }
 

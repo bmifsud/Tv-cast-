@@ -11,11 +11,19 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Binder
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.launch
 
 class ScreenCaptureService : Service() {
 
@@ -26,9 +34,19 @@ class ScreenCaptureService : Service() {
     private val binder = LocalBinder()
     private var mediaProjection: MediaProjection? = null
     private var encoder: ScreenCaptureEncoder? = null
+    private var encoderCollectJob: Job? = null
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val _encodedStream = MutableSharedFlow<ByteArray>(extraBufferCapacity = 64)
     val encodedStream: Flow<ByteArray> = _encodedStream.asSharedFlow()
+
+    private val projectionCallback = object : MediaProjection.Callback() {
+        override fun onStop() {
+            stopCapture()
+            stopSelf()
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder {
         return binder
@@ -68,19 +86,47 @@ class ScreenCaptureService : Service() {
     }
 
     fun startCaptureWithProjection(projection: MediaProjection, width: Int = 1280, height: Int = 720, dpi: Int = 300) {
+        stopPreviousSession()
         startForegroundService()
+
         mediaProjection = projection
+        try {
+            projection.registerCallback(projectionCallback, Handler(Looper.getMainLooper()))
+        } catch (_: Exception) {}
+
         initAndStartEncoder(projection, width, height, dpi)
     }
 
     private fun startCapture(resultCode: Int, resultData: Intent) {
+        stopPreviousSession()
         startForegroundService()
+
         val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         val projection = projectionManager.getMediaProjection(resultCode, resultData)
         if (projection != null) {
             mediaProjection = projection
+            try {
+                projection.registerCallback(projectionCallback, Handler(Looper.getMainLooper()))
+            } catch (_: Exception) {}
+
             initAndStartEncoder(projection, 1280, 720, 300)
         }
+    }
+
+    private fun stopPreviousSession() {
+        encoderCollectJob?.cancel()
+        encoderCollectJob = null
+
+        encoder?.stop()
+        encoder = null
+
+        try {
+            mediaProjection?.unregisterCallback(projectionCallback)
+        } catch (_: Exception) {}
+        try {
+            mediaProjection?.stop()
+        } catch (_: Exception) {}
+        mediaProjection = null
     }
 
     private fun startForegroundService() {
@@ -97,7 +143,9 @@ class ScreenCaptureService : Service() {
     }
 
     private fun initAndStartEncoder(projection: MediaProjection, width: Int, height: Int, dpi: Int) {
+        encoderCollectJob?.cancel()
         encoder?.stop()
+
         val newEncoder = ScreenCaptureEncoder(
             mediaProjection = projection,
             width = width,
@@ -105,15 +153,18 @@ class ScreenCaptureService : Service() {
             dpi = dpi
         )
         encoder = newEncoder
+
+        encoderCollectJob = serviceScope.launch {
+            newEncoder.encodedOutput.collect { bytes ->
+                _encodedStream.emit(bytes)
+            }
+        }
+
         newEncoder.start()
     }
 
     fun stopCapture() {
-        encoder?.stop()
-        encoder = null
-
-        mediaProjection?.stop()
-        mediaProjection = null
+        stopPreviousSession()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -125,6 +176,7 @@ class ScreenCaptureService : Service() {
 
     override fun onDestroy() {
         stopCapture()
+        serviceScope.cancel()
         super.onDestroy()
     }
 

@@ -71,7 +71,6 @@ class UniversalUiRobolectricTest {
         val nextIntent = shadowApp.nextStartedActivity
         assertNotNull(nextIntent)
 
-        // Or directly verify that casting was initiated via fallback or intent result
         if (!stubSender.isCasting.value) {
             viewModel.startCasting(nextIntent)
         }

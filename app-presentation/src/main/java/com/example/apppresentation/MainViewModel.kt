@@ -4,21 +4,21 @@ import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.apppresentation.capture.CaptureEmitter
-import com.example.apppresentation.capture.StubCaptureEmitter
+import com.example.apppresentation.capture.RealCaptureEmitter
 import com.example.apppresentation.network.DiscoveredDevice
 import com.example.apppresentation.network.Discoverer
+import com.example.apppresentation.network.RealDiscoverer
+import com.example.apppresentation.network.RealSender
 import com.example.apppresentation.network.Sender
-import com.example.apppresentation.network.StubDiscoverer
-import com.example.apppresentation.network.StubSender
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class MainViewModel(
-    val discoverer: Discoverer = StubDiscoverer(),
-    val sender: Sender = StubSender(),
-    val captureEmitter: CaptureEmitter = StubCaptureEmitter()
+    val discoverer: Discoverer = RealDiscoverer(),
+    val sender: Sender = RealSender(),
+    val captureEmitter: CaptureEmitter = RealCaptureEmitter()
 ) : ViewModel() {
 
     private val _selectedDevice = MutableStateFlow<DiscoveredDevice?>(null)

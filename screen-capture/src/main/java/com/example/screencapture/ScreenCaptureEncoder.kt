@@ -27,10 +27,12 @@ class ScreenCaptureEncoder(
     val bitRate: Int = 2_000_000,
     val frameRate: Int = 30,
     val iFrameInterval: Int = 2,
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default),
+    existingVirtualDisplay: VirtualDisplay? = null
 ) {
     private var mediaCodec: MediaCodec? = null
-    private var virtualDisplay: VirtualDisplay? = null
+    var virtualDisplay: VirtualDisplay? = existingVirtualDisplay
+        private set
     private var inputSurface: Surface? = null
     private var encodingJob: Job? = null
 
@@ -62,16 +64,22 @@ class ScreenCaptureEncoder(
             mediaCodec = codec
             inputSurface = surface
 
-            virtualDisplay = mediaProjection.createVirtualDisplay(
-                "ScreenCaptureDisplay",
-                width,
-                height,
-                dpi,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                surface,
-                null,
-                null
-            )
+            val currentVd = virtualDisplay
+            if (currentVd == null) {
+                virtualDisplay = mediaProjection.createVirtualDisplay(
+                    "ScreenCaptureDisplay",
+                    width,
+                    height,
+                    dpi,
+                    DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                    surface,
+                    null,
+                    null
+                )
+            } else {
+                currentVd.setSurface(surface)
+                currentVd.resize(width, height, dpi)
+            }
 
             isEncoding = true
 
@@ -129,15 +137,17 @@ class ScreenCaptureEncoder(
         }
     }
 
-    fun stop() {
+    fun stop(releaseVirtualDisplay: Boolean = true) {
         isEncoding = false
         encodingJob?.cancel()
         encodingJob = null
 
-        try {
-            virtualDisplay?.release()
-        } catch (_: Exception) {}
-        virtualDisplay = null
+        if (releaseVirtualDisplay) {
+            try {
+                virtualDisplay?.release()
+            } catch (_: Exception) {}
+            virtualDisplay = null
+        }
 
         try {
             inputSurface?.release()

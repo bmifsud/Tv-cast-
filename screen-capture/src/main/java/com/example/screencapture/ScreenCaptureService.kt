@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.hardware.display.VirtualDisplay
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Binder
@@ -33,6 +34,7 @@ class ScreenCaptureService : Service() {
 
     private val binder = LocalBinder()
     private var mediaProjection: MediaProjection? = null
+    private var virtualDisplay: VirtualDisplay? = null
     private var encoder: ScreenCaptureEncoder? = null
     private var encoderCollectJob: Job? = null
 
@@ -86,13 +88,14 @@ class ScreenCaptureService : Service() {
     }
 
     fun startCaptureWithProjection(projection: MediaProjection, width: Int = 1280, height: Int = 720, dpi: Int = 300) {
-        stopPreviousSession()
+        if (mediaProjection != projection) {
+            stopPreviousSession()
+            mediaProjection = projection
+            try {
+                projection.registerCallback(projectionCallback, Handler(Looper.getMainLooper()))
+            } catch (_: Exception) {}
+        }
         startForegroundService()
-
-        mediaProjection = projection
-        try {
-            projection.registerCallback(projectionCallback, Handler(Looper.getMainLooper()))
-        } catch (_: Exception) {}
 
         initAndStartEncoder(projection, width, height, dpi)
     }
@@ -117,8 +120,13 @@ class ScreenCaptureService : Service() {
         encoderCollectJob?.cancel()
         encoderCollectJob = null
 
-        encoder?.stop()
+        encoder?.stop(releaseVirtualDisplay = true)
         encoder = null
+
+        try {
+            virtualDisplay?.release()
+        } catch (_: Exception) {}
+        virtualDisplay = null
 
         try {
             mediaProjection?.unregisterCallback(projectionCallback)
@@ -144,13 +152,16 @@ class ScreenCaptureService : Service() {
 
     private fun initAndStartEncoder(projection: MediaProjection, width: Int, height: Int, dpi: Int) {
         encoderCollectJob?.cancel()
-        encoder?.stop()
+        encoderCollectJob = null
+
+        encoder?.stop(releaseVirtualDisplay = false)
 
         val newEncoder = ScreenCaptureEncoder(
             mediaProjection = projection,
             width = width,
             height = height,
-            dpi = dpi
+            dpi = dpi,
+            existingVirtualDisplay = virtualDisplay
         )
         encoder = newEncoder
 
@@ -161,6 +172,7 @@ class ScreenCaptureService : Service() {
         }
 
         newEncoder.start()
+        virtualDisplay = newEncoder.virtualDisplay
     }
 
     fun stopCapture() {
